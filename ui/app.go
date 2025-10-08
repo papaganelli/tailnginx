@@ -25,6 +25,7 @@ type Model struct {
 	statusCodes map[int]int
 	topPaths    map[string]int
 	userAgents  map[string]int
+	methods     map[string]int
 	width       int
 	height      int
 	startTime   time.Time
@@ -39,6 +40,7 @@ func NewApp(lines <-chan string) *Model {
 		statusCodes: make(map[int]int),
 		topPaths:    make(map[string]int),
 		userAgents:  make(map[string]int),
+		methods:     make(map[string]int),
 		startTime:   time.Now(),
 	}
 }
@@ -80,6 +82,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.uniqueIPs[visitor.IP]++
 			m.statusCodes[visitor.Status]++
 			m.topPaths[visitor.Path]++
+			m.methods[visitor.Method]++
 
 			// Extract browser from user agent
 			agent := extractBrowser(visitor.Agent)
@@ -97,158 +100,255 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	// Styles
+	// Color palette
+	var (
+		primaryColor   = lipgloss.Color("86")   // Cyan
+		secondaryColor = lipgloss.Color("213")  // Pink
+		successColor   = lipgloss.Color("46")   // Green
+		warningColor   = lipgloss.Color("220")  // Yellow
+		errorColor     = lipgloss.Color("196")  // Red
+		textColor      = lipgloss.Color("252")  // Light gray
+		dimColor       = lipgloss.Color("241")  // Dark gray
+		borderColor    = lipgloss.Color("240")  // Border gray
+		accentColor    = lipgloss.Color("117")  // Light blue
+	)
+
+	// Base styles
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("86")).
+		Foreground(primaryColor).
 		Background(lipgloss.Color("235")).
-		Padding(0, 1)
+		Padding(0, 2).
+		MarginBottom(1)
+
+	panelStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(1, 2).
+		MarginRight(1).
+		MarginBottom(1)
 
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("39")).
-		MarginTop(1)
+		Foreground(accentColor).
+		MarginBottom(1)
 
-	statStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
+	metricLabelStyle := lipgloss.NewStyle().
+		Foreground(dimColor).
+		Width(18)
 
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241"))
+	metricValueStyle := lipgloss.NewStyle().
+		Foreground(primaryColor).
+		Bold(true)
 
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196"))
+	statLabelStyle := lipgloss.NewStyle().
+		Foreground(textColor)
 
-	successStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("46"))
+	// Calculate panel widths
+	panelWidth := (m.width / 2) - 4
+	if panelWidth < 30 {
+		panelWidth = 30
+	}
 
-	warningStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("220"))
+	// Header
+	uptime := time.Since(m.startTime).Round(time.Second)
+	header := titleStyle.Render("🚀 TAILNGINX DASHBOARD") + "\n" +
+		lipgloss.NewStyle().Foreground(dimColor).Render(
+			fmt.Sprintf("Running: %s  •  Press 'q' to quit", uptime),
+		)
 
-	// Build the UI
-	var s strings.Builder
+	// Overview metrics panel
+	overviewContent := headerStyle.Render("📊 Overview") + "\n" +
+		metricLabelStyle.Render("Total Requests") + metricValueStyle.Render(fmt.Sprintf("%d", len(m.visitors))) + "\n" +
+		metricLabelStyle.Render("Unique Visitors") + metricValueStyle.Render(fmt.Sprintf("%d", len(m.uniqueIPs))) + "\n" +
+		metricLabelStyle.Render("Avg Bytes/Req") + metricValueStyle.Render(m.calculateAvgBytes())
 
-	// Title
-	s.WriteString(titleStyle.Render("NGINX MONITOR"))
-	s.WriteString("\n")
-	s.WriteString(labelStyle.Render(fmt.Sprintf("Running since: %s | Press 'q' to quit", m.startTime.Format("15:04:05"))))
-	s.WriteString("\n")
+	overviewPanel := panelStyle.Width(panelWidth).Render(overviewContent)
 
-	// Overview stats
-	s.WriteString(headerStyle.Render("📊 OVERVIEW"))
-	s.WriteString("\n")
-	s.WriteString(statStyle.Render(fmt.Sprintf("Total Requests: %d | Unique IPs: %d | Uptime: %s",
-		len(m.visitors),
-		len(m.uniqueIPs),
-		time.Since(m.startTime).Round(time.Second),
-	)))
-	s.WriteString("\n")
+	// Status codes panel with bars
+	statusContent := headerStyle.Render("📡 HTTP Status Codes") + "\n"
+	totalReqs := len(m.visitors)
+	if totalReqs == 0 {
+		totalReqs = 1
+	}
 
-	// Status codes
-	s.WriteString(headerStyle.Render("📡 STATUS CODES"))
-	s.WriteString("\n")
 	statuses := sortMapByValue(m.statusCodes)
 	for i, kv := range statuses {
 		if i >= 5 {
 			break
 		}
-		statusStr := fmt.Sprintf("%d", kv.key)
-		var styled string
+		percentage := float64(kv.value) / float64(totalReqs) * 100
+		bar := createBar(int(percentage), 20)
+
+		var statusColor lipgloss.Color
 		switch {
 		case kv.key >= 200 && kv.key < 300:
-			styled = successStyle.Render(statusStr)
+			statusColor = successColor
 		case kv.key >= 300 && kv.key < 400:
-			styled = warningStyle.Render(statusStr)
-		case kv.key >= 400:
-			styled = errorStyle.Render(statusStr)
+			statusColor = warningColor
 		default:
-			styled = statStyle.Render(statusStr)
+			statusColor = errorColor
 		}
-		s.WriteString(fmt.Sprintf("  %s: %d\n", styled, kv.value))
+
+		statusContent += fmt.Sprintf("%s %s %s\n",
+			lipgloss.NewStyle().Foreground(statusColor).Render(fmt.Sprintf("%3d", kv.key)),
+			bar,
+			lipgloss.NewStyle().Foreground(dimColor).Render(fmt.Sprintf("%3d (%.1f%%)", kv.value, percentage)),
+		)
 	}
 
-	// Top paths
-	s.WriteString(headerStyle.Render("🔥 TOP PATHS"))
-	s.WriteString("\n")
+	statusPanel := panelStyle.Width(panelWidth).Render(statusContent)
+
+	// Top row: Overview + Status codes
+	topRow := lipgloss.JoinHorizontal(lipgloss.Top, overviewPanel, statusPanel)
+
+	// Top paths panel
+	pathsContent := headerStyle.Render("🔥 Top Paths") + "\n"
 	paths := sortMapByValue(m.topPaths)
 	for i, kv := range paths {
-		if i >= 5 {
+		if i >= 6 {
 			break
 		}
 		pathStr := kv.key
-		if len(pathStr) > 50 {
-			pathStr = pathStr[:47] + "..."
+		if len(pathStr) > panelWidth-15 {
+			pathStr = pathStr[:panelWidth-18] + "..."
 		}
-		s.WriteString(fmt.Sprintf("  %s %s\n",
-			statStyle.Render(pathStr),
-			labelStyle.Render(fmt.Sprintf("(%d)", kv.value)),
-		))
+
+		count := lipgloss.NewStyle().Foreground(secondaryColor).Render(fmt.Sprintf("%3d", kv.value))
+		pathsContent += fmt.Sprintf("%s  %s\n", count, statLabelStyle.Render(pathStr))
 	}
 
-	// Top IPs
-	s.WriteString(headerStyle.Render("👥 TOP VISITORS"))
-	s.WriteString("\n")
+	pathsPanel := panelStyle.Width(panelWidth).Render(pathsContent)
+
+	// Top visitors panel
+	visitorsContent := headerStyle.Render("👥 Top Visitors") + "\n"
 	ips := sortMapByValue(m.uniqueIPs)
 	for i, kv := range ips {
-		if i >= 5 {
+		if i >= 6 {
 			break
 		}
-		s.WriteString(fmt.Sprintf("  %s %s\n",
-			statStyle.Render(kv.key),
-			labelStyle.Render(fmt.Sprintf("(%d requests)", kv.value)),
-		))
+		count := lipgloss.NewStyle().Foreground(secondaryColor).Render(fmt.Sprintf("%3d", kv.value))
+		visitorsContent += fmt.Sprintf("%s  %s\n",
+			count,
+			statLabelStyle.Render(kv.key),
+		)
 	}
 
-	// User agents
-	s.WriteString(headerStyle.Render("🌐 BROWSERS / CLIENTS"))
-	s.WriteString("\n")
+	visitorsPanel := panelStyle.Width(panelWidth).Render(visitorsContent)
+
+	// Middle row: Paths + Visitors
+	middleRow := lipgloss.JoinHorizontal(lipgloss.Top, pathsPanel, visitorsPanel)
+
+	// Browsers panel
+	browsersContent := headerStyle.Render("🌐 Clients & Browsers") + "\n"
 	agents := sortMapByValue(m.userAgents)
 	for i, kv := range agents {
-		if i >= 5 {
+		if i >= 6 {
 			break
 		}
-		s.WriteString(fmt.Sprintf("  %s %s\n",
-			statStyle.Render(kv.key),
-			labelStyle.Render(fmt.Sprintf("(%d)", kv.value)),
-		))
+		count := lipgloss.NewStyle().Foreground(secondaryColor).Render(fmt.Sprintf("%3d", kv.value))
+		browsersContent += fmt.Sprintf("%s  %s\n", count, statLabelStyle.Render(kv.key))
 	}
 
-	// Recent requests
-	s.WriteString(headerStyle.Render("📝 RECENT REQUESTS"))
-	s.WriteString("\n")
-	recentCount := 8
+	browsersPanel := panelStyle.Width(panelWidth).Render(browsersContent)
+
+	// Methods panel
+	methodsContent := headerStyle.Render("🔧 HTTP Methods") + "\n"
+	methods := sortMapByValue(m.methods)
+	for i, kv := range methods {
+		if i >= 6 {
+			break
+		}
+		var methodColor lipgloss.Color
+		switch kv.key {
+		case "GET":
+			methodColor = successColor
+		case "POST":
+			methodColor = accentColor
+		case "PUT", "PATCH":
+			methodColor = warningColor
+		case "DELETE":
+			methodColor = errorColor
+		default:
+			methodColor = textColor
+		}
+
+		count := lipgloss.NewStyle().Foreground(secondaryColor).Render(fmt.Sprintf("%3d", kv.value))
+		method := lipgloss.NewStyle().Foreground(methodColor).Bold(true).Render(fmt.Sprintf("%-6s", kv.key))
+		methodsContent += fmt.Sprintf("%s  %s\n", count, method)
+	}
+
+	methodsPanel := panelStyle.Width(panelWidth).Render(methodsContent)
+
+	// Lower middle row: Browsers + Methods
+	lowerMiddleRow := lipgloss.JoinHorizontal(lipgloss.Top, browsersPanel, methodsPanel)
+
+	// Recent requests panel (full width)
+	recentContent := headerStyle.Render("📝 Recent Activity") + "\n"
+	recentCount := 7
 	if len(m.visitors) < recentCount {
 		recentCount = len(m.visitors)
 	}
+
 	for i := 0; i < recentCount; i++ {
 		v := m.visitors[i]
-		timeStr := v.Time.Format("15:04:05")
-		var statusStyled string
+		timeStr := lipgloss.NewStyle().Foreground(dimColor).Render(v.Time.Format("15:04:05"))
+
+		var statusStyle lipgloss.Style
 		switch {
 		case v.Status >= 200 && v.Status < 300:
-			statusStyled = successStyle.Render(fmt.Sprintf("%d", v.Status))
+			statusStyle = lipgloss.NewStyle().Foreground(successColor).Bold(true)
 		case v.Status >= 300 && v.Status < 400:
-			statusStyled = warningStyle.Render(fmt.Sprintf("%d", v.Status))
-		case v.Status >= 400:
-			statusStyled = errorStyle.Render(fmt.Sprintf("%d", v.Status))
+			statusStyle = lipgloss.NewStyle().Foreground(warningColor).Bold(true)
 		default:
-			statusStyled = statStyle.Render(fmt.Sprintf("%d", v.Status))
+			statusStyle = lipgloss.NewStyle().Foreground(errorColor).Bold(true)
+		}
+
+		var methodColor lipgloss.Color
+		switch v.Method {
+		case "GET":
+			methodColor = successColor
+		case "POST":
+			methodColor = accentColor
+		case "PUT", "PATCH":
+			methodColor = warningColor
+		case "DELETE":
+			methodColor = errorColor
+		default:
+			methodColor = textColor
 		}
 
 		pathStr := v.Path
-		if len(pathStr) > 40 {
-			pathStr = pathStr[:37] + "..."
+		maxPathLen := m.width - 60
+		if maxPathLen < 20 {
+			maxPathLen = 20
+		}
+		if len(pathStr) > maxPathLen {
+			pathStr = pathStr[:maxPathLen-3] + "..."
 		}
 
-		s.WriteString(fmt.Sprintf("  %s %s %s %s %s\n",
-			labelStyle.Render(timeStr),
-			statStyle.Render(v.IP),
-			statStyle.Render(v.Method),
-			statStyle.Render(pathStr),
-			statusStyled,
-		))
+		recentContent += fmt.Sprintf("%s  %-15s  %s  %s  %s\n",
+			timeStr,
+			lipgloss.NewStyle().Foreground(textColor).Render(v.IP),
+			lipgloss.NewStyle().Foreground(methodColor).Bold(true).Render(fmt.Sprintf("%-6s", v.Method)),
+			statusStyle.Render(fmt.Sprintf("%3d", v.Status)),
+			lipgloss.NewStyle().Foreground(textColor).Render(pathStr),
+		)
 	}
 
-	return s.String()
+	recentPanel := panelStyle.Width(m.width - 4).Render(recentContent)
+
+	// Assemble the dashboard
+	dashboard := lipgloss.JoinVertical(
+		lipgloss.Left,
+		header,
+		topRow,
+		middleRow,
+		lowerMiddleRow,
+		recentPanel,
+	)
+
+	return dashboard
 }
 
 // Run starts the Bubble Tea program
@@ -305,6 +405,43 @@ func extractBrowser(agent string) string {
 		}
 		return agent
 	}
+}
+
+// calculateAvgBytes calculates average bytes per request
+func (m *Model) calculateAvgBytes() string {
+	if len(m.visitors) == 0 {
+		return "0 B"
+	}
+
+	total := 0
+	for _, v := range m.visitors {
+		total += v.Bytes
+	}
+
+	avg := total / len(m.visitors)
+
+	if avg < 1024 {
+		return fmt.Sprintf("%d B", avg)
+	} else if avg < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(avg)/1024)
+	}
+	return fmt.Sprintf("%.1f MB", float64(avg)/(1024*1024))
+}
+
+// createBar creates a simple progress bar
+func createBar(percentage, width int) string {
+	if percentage > 100 {
+		percentage = 100
+	}
+	if percentage < 0 {
+		percentage = 0
+	}
+
+	filled := int(float64(width) * float64(percentage) / 100)
+	empty := width - filled
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(bar)
 }
 
 // keyValue is a helper for sorting maps
