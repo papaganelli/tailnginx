@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Build binaries
+        run: |
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 go build -o tailnginx-linux-amd64 ./cmd/tailnginx
+
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 go build -o tailnginx-linux-arm64 ./cmd/tailnginx
+
+          # macOS AMD64
+          GOOS=darwin GOARCH=amd64 go build -o tailnginx-darwin-amd64 ./cmd/tailnginx
+
+          # macOS ARM64 (Apple Silicon)
+          GOOS=darwin GOARCH=arm64 go build -o tailnginx-darwin-arm64 ./cmd/tailnginx
+
+          # Windows AMD64
+          GOOS=windows GOARCH=amd64 go build -o tailnginx-windows-amd64.exe ./cmd/tailnginx
+
+      - name: Create checksums
+        run: |
+          sha256sum tailnginx-* > checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            tailnginx-linux-amd64
+            tailnginx-linux-arm64
+            tailnginx-darwin-amd64
+            tailnginx-darwin-arm64
+            tailnginx-windows-amd64.exe
+            checksums.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false
