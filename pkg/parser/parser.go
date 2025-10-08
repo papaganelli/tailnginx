@@ -1,3 +1,4 @@
+// Package parser provides functionality to parse nginx access log entries.
 package parser
 
 import (
@@ -18,14 +19,10 @@ type Visitor struct {
 	Agent    string
 }
 
+// combinedRegex matches the nginx combined log format
 var combinedRegex = regexp.MustCompile(`(?P<ip>[^ ]+) [^ ]+ [^ ]+ \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>[^ ]+) (?P<proto>[^\"]+)" (?P<status>\d{3}) (?P<bytes>\d+|-) "[^"]*" "(?P<agent>[^"]+)"`)
 
-// NewParser returns a parser instance (stateless for now).
-func NewParser() *struct{} {
-	return &struct{}{}
-}
-
-// Parse parses a combined log line into a Visitor. Returns nil if the line doesn't match.
+// Parse parses a nginx combined log line into a Visitor. Returns nil if the line doesn't match.
 func Parse(line string) *Visitor {
 	m := combinedRegex.FindStringSubmatch(line)
 	if m == nil {

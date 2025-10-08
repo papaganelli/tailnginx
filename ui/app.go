@@ -1,3 +1,4 @@
+// Package ui provides the terminal user interface for tailnginx using Bubble Tea.
 package ui
 
 import (
@@ -8,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/papaganelli/tailnginx/pkg/geoip"
 	"github.com/papaganelli/tailnginx/pkg/parser"
 )
 
@@ -27,6 +29,7 @@ type Model struct {
 	topPaths        map[string]int
 	userAgents      map[string]int
 	methods         map[string]int
+	countries       map[string]int // Country name -> count
 	width           int
 	height          int
 	startTime       time.Time
@@ -37,10 +40,11 @@ type Model struct {
 	filterPath      string
 	filterInputMode bool   // true when typing a filter
 	filterInput     string // current filter input
+	geoLocator      *geoip.Locator
 }
 
 // NewApp creates a new Bubble Tea model
-func NewApp(lines <-chan string, refreshRate time.Duration) *Model {
+func NewApp(lines <-chan string, refreshRate time.Duration, geoLocator *geoip.Locator) *Model {
 	return &Model{
 		lines:        lines,
 		visitors:     []parser.Visitor{},
@@ -50,9 +54,11 @@ func NewApp(lines <-chan string, refreshRate time.Duration) *Model {
 		topPaths:     make(map[string]int),
 		userAgents:   make(map[string]int),
 		methods:      make(map[string]int),
+		countries:    make(map[string]int),
 		startTime:    time.Now(),
 		refreshRate:  refreshRate,
 		filterStatus: 0, // Show all by default
+		geoLocator:   geoLocator,
 	}
 }
 
@@ -196,6 +202,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Extract browser from user agent
 				agent := extractBrowser(visitor.Agent)
 				m.userAgents[agent]++
+
+				// Lookup geolocation
+				if m.geoLocator != nil {
+					if loc, err := m.geoLocator.Lookup(visitor.IP); err == nil && loc != nil {
+						if loc.Country != "Unknown" && loc.Country != "??" {
+							m.countries[loc.Country]++
+						}
+					}
+				}
 			}
 		}
 		// Continue reading lines even when paused (just don't process them)
@@ -259,6 +274,11 @@ func (m Model) View() string {
 	panelWidth := (m.width / 2) - 4
 	if panelWidth < 30 {
 		panelWidth = 30
+	}
+	// For 3-panel row, account for borders (2 chars per panel) and gaps (2 chars between panels)
+	smallPanelWidth := (m.width - 10) / 3
+	if smallPanelWidth < 25 {
+		smallPanelWidth = 25
 	}
 
 	// Header
@@ -397,7 +417,7 @@ func (m Model) View() string {
 		browsersContent += fmt.Sprintf("%s  %s\n", count, statLabelStyle.Render(kv.key))
 	}
 
-	browsersPanel := panelStyle.Width(panelWidth).Render(browsersContent)
+	browsersPanel := panelStyle.Width(smallPanelWidth).Render(browsersContent)
 
 	// Methods panel
 	methodsContent := headerStyle.Render("🔧 HTTP Methods") + "\n"
@@ -430,14 +450,37 @@ func (m Model) View() string {
 	// Lower middle row: Browsers + Methods
 	lowerMiddleRow := lipgloss.JoinHorizontal(lipgloss.Top, browsersPanel, methodsPanel)
 
-	// Recent requests panel (full width)
-	recentContent := headerStyle.Render("📝 Recent Activity") + "\n"
-	recentCount := 7
-	if len(m.visitors) < recentCount {
-		recentCount = len(m.visitors)
+	// Countries panel (full width)
+	countriesContent := headerStyle.Render("🌍 Countries") + "\n"
+	if m.geoLocator == nil {
+		countriesContent += lipgloss.NewStyle().Foreground(dimColor).Render("  Geolocation disabled")
+	} else if len(m.countries) == 0 {
+		countriesContent += lipgloss.NewStyle().Foreground(dimColor).Render("  Waiting for visitor data...")
+	} else {
+		countries := sortMapByValue(m.countries)
+		for i, kv := range countries {
+			if i >= 6 {
+				break
+			}
+			count := lipgloss.NewStyle().Foreground(secondaryColor).Render(fmt.Sprintf("%3d", kv.value))
+			countriesContent += fmt.Sprintf("%s  %s\n", count, statLabelStyle.Render(kv.key))
+		}
 	}
 
-	for i := 0; i < recentCount; i++ {
+	countriesPanel := panelStyle.Width(m.width - 4).Render(countriesContent)
+
+	// Recent requests panel (full width)
+	recentContent := headerStyle.Render("📝 Recent Activity") + "\n"
+
+	if len(m.visitors) == 0 {
+		recentContent += lipgloss.NewStyle().Foreground(dimColor).Render("  Waiting for log entries...")
+	} else {
+		recentCount := 7
+		if len(m.visitors) < recentCount {
+			recentCount = len(m.visitors)
+		}
+
+		for i := 0; i < recentCount; i++ {
 		v := m.visitors[i]
 		timeStr := lipgloss.NewStyle().Foreground(dimColor).Render(v.Time.Format("15:04:05"))
 
@@ -481,6 +524,7 @@ func (m Model) View() string {
 			statusStyle.Render(fmt.Sprintf("%3d", v.Status)),
 			lipgloss.NewStyle().Foreground(textColor).Render(pathStr),
 		)
+		}
 	}
 
 	recentPanel := panelStyle.Width(m.width - 4).Render(recentContent)
@@ -492,6 +536,7 @@ func (m Model) View() string {
 		topRow,
 		middleRow,
 		lowerMiddleRow,
+		countriesPanel,
 		recentPanel,
 	)
 

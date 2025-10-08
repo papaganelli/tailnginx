@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/papaganelli/tailnginx/internal/config"
+	"github.com/papaganelli/tailnginx/pkg/geoip"
 	"github.com/papaganelli/tailnginx/pkg/tailer"
 	"github.com/papaganelli/tailnginx/ui"
 )
@@ -28,6 +29,14 @@ func main() {
 		cfg.RefreshRate = config.MaxRefreshRate
 	}
 
+	// Initialize GeoIP locator with automatic database management
+	geoLocator, err := geoip.NewLocator()
+	if err != nil {
+		geoLocator = nil
+	} else {
+		defer geoLocator.Close()
+	}
+
 	done := make(chan struct{})
 	defer close(done)
 
@@ -36,7 +45,7 @@ func main() {
 		log.Fatalf("failed to tail file: %v", err)
 	}
 
-	app := ui.NewApp(lines, cfg.RefreshRate)
+	app := ui.NewApp(lines, cfg.RefreshRate, geoLocator)
 	if err := app.Run(); err != nil {
 		log.Fatalf("app error: %v", err)
 	}

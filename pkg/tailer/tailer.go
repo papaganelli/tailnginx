@@ -1,3 +1,4 @@
+// Package tailer provides functionality to tail log files in real-time.
 package tailer
 
 import (

@@ -1,3 +1,4 @@
+// Package config provides configuration types and constants for tailnginx.
 package config
 
 import "time"
