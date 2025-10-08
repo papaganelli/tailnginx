@@ -67,4 +67,3 @@ func Parse(line string) *Visitor {
 	}
 	return result
 }
- 

@@ -102,15 +102,15 @@ func (m Model) View() string {
 
 	// Color palette
 	var (
-		primaryColor   = lipgloss.Color("86")   // Cyan
-		secondaryColor = lipgloss.Color("213")  // Pink
-		successColor   = lipgloss.Color("46")   // Green
-		warningColor   = lipgloss.Color("220")  // Yellow
-		errorColor     = lipgloss.Color("196")  // Red
-		textColor      = lipgloss.Color("252")  // Light gray
-		dimColor       = lipgloss.Color("241")  // Dark gray
-		borderColor    = lipgloss.Color("240")  // Border gray
-		accentColor    = lipgloss.Color("117")  // Light blue
+		primaryColor   = lipgloss.Color("86")  // Cyan
+		secondaryColor = lipgloss.Color("213") // Pink
+		successColor   = lipgloss.Color("46")  // Green
+		warningColor   = lipgloss.Color("220") // Yellow
+		errorColor     = lipgloss.Color("196") // Red
+		textColor      = lipgloss.Color("252") // Light gray
+		dimColor       = lipgloss.Color("241") // Dark gray
+		borderColor    = lipgloss.Color("240") // Border gray
+		accentColor    = lipgloss.Color("117") // Light blue
 	)
 
 	// Base styles
