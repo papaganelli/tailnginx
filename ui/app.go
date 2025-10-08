@@ -30,6 +30,7 @@ type Model struct {
 	height      int
 	startTime   time.Time
 	refreshRate time.Duration
+	paused      bool
 }
 
 // NewApp creates a new Bubble Tea model
@@ -62,6 +63,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			return m, tea.Quit
+		case " ":
+			// Toggle pause
+			wasPaused := m.paused
+			m.paused = !m.paused
+			// If unpausing, restart the tick
+			if wasPaused && !m.paused {
+				return m, tickCmd(m.refreshRate)
+			}
 		case "+", "=":
 			// Decrease refresh interval (faster updates)
 			m.refreshRate = m.refreshRate / 2
@@ -81,27 +90,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tickMsg:
-		return m, tickCmd(m.refreshRate)
+		// Only schedule next tick if not paused
+		if !m.paused {
+			return m, tickCmd(m.refreshRate)
+		}
+		return m, nil
 
 	case logLineMsg:
-		// Parse the log line
-		if visitor := parser.Parse(string(msg)); visitor != nil {
-			// Add to visitors list (keep last 100)
-			m.visitors = append([]parser.Visitor{*visitor}, m.visitors...)
-			if len(m.visitors) > 100 {
-				m.visitors = m.visitors[:100]
+		// Only process new log lines if not paused
+		if !m.paused {
+			// Parse the log line
+			if visitor := parser.Parse(string(msg)); visitor != nil {
+				// Add to visitors list (keep last 100)
+				m.visitors = append([]parser.Visitor{*visitor}, m.visitors...)
+				if len(m.visitors) > 100 {
+					m.visitors = m.visitors[:100]
+				}
+
+				// Update stats
+				m.uniqueIPs[visitor.IP]++
+				m.statusCodes[visitor.Status]++
+				m.topPaths[visitor.Path]++
+				m.methods[visitor.Method]++
+
+				// Extract browser from user agent
+				agent := extractBrowser(visitor.Agent)
+				m.userAgents[agent]++
 			}
-
-			// Update stats
-			m.uniqueIPs[visitor.IP]++
-			m.statusCodes[visitor.Status]++
-			m.topPaths[visitor.Path]++
-			m.methods[visitor.Method]++
-
-			// Extract browser from user agent
-			agent := extractBrowser(visitor.Agent)
-			m.userAgents[agent]++
 		}
+		// Continue reading lines even when paused (just don't process them)
 		return m, waitForLine(m.lines)
 	}
 
@@ -167,9 +184,15 @@ func (m Model) View() string {
 	// Header
 	uptime := time.Since(m.startTime).Round(time.Second)
 	refreshMs := m.refreshRate.Milliseconds()
-	header := titleStyle.Render("🚀 TAILNGINX DASHBOARD") + "\n" +
+
+	statusText := ""
+	if m.paused {
+		statusText = lipgloss.NewStyle().Foreground(warningColor).Bold(true).Render(" ⏸ PAUSED")
+	}
+
+	header := titleStyle.Render("🚀 TAILNGINX DASHBOARD") + statusText + "\n" +
 		lipgloss.NewStyle().Foreground(dimColor).Render(
-			fmt.Sprintf("Running: %s  •  Refresh: %dms  •  Press 'q' to quit, '+/-' to adjust speed", uptime, refreshMs),
+			fmt.Sprintf("Running: %s  •  Refresh: %dms  •  Press 'q' to quit, 'space' to pause, '+/-' to adjust speed", uptime, refreshMs),
 		)
 
 	// Overview metrics panel
