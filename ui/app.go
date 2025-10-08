@@ -19,32 +19,40 @@ type logLineMsg string
 
 // Model holds the Bubble Tea application state
 type Model struct {
-	lines       <-chan string
-	visitors    []parser.Visitor
-	uniqueIPs   map[string]int
-	statusCodes map[int]int
-	topPaths    map[string]int
-	userAgents  map[string]int
-	methods     map[string]int
-	width       int
-	height      int
-	startTime   time.Time
-	refreshRate time.Duration
-	paused      bool
+	lines           <-chan string
+	visitors        []parser.Visitor
+	allVisitors     []parser.Visitor // Unfiltered list
+	uniqueIPs       map[string]int
+	statusCodes     map[int]int
+	topPaths        map[string]int
+	userAgents      map[string]int
+	methods         map[string]int
+	width           int
+	height          int
+	startTime       time.Time
+	refreshRate     time.Duration
+	paused          bool
+	filterIP        string
+	filterStatus    int // 0=all, 2=2xx, 3=3xx, 4=4xx, 5=5xx
+	filterPath      string
+	filterInputMode bool   // true when typing a filter
+	filterInput     string // current filter input
 }
 
 // NewApp creates a new Bubble Tea model
 func NewApp(lines <-chan string, refreshRate time.Duration) *Model {
 	return &Model{
-		lines:       lines,
-		visitors:    []parser.Visitor{},
-		uniqueIPs:   make(map[string]int),
-		statusCodes: make(map[int]int),
-		topPaths:    make(map[string]int),
-		userAgents:  make(map[string]int),
-		methods:     make(map[string]int),
-		startTime:   time.Now(),
-		refreshRate: refreshRate,
+		lines:        lines,
+		visitors:     []parser.Visitor{},
+		allVisitors:  []parser.Visitor{},
+		uniqueIPs:    make(map[string]int),
+		statusCodes:  make(map[int]int),
+		topPaths:     make(map[string]int),
+		userAgents:   make(map[string]int),
+		methods:      make(map[string]int),
+		startTime:    time.Now(),
+		refreshRate:  refreshRate,
+		filterStatus: 0, // Show all by default
 	}
 }
 
@@ -60,9 +68,42 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle filter input mode separately
+		if m.filterInputMode {
+			switch msg.String() {
+			case "enter":
+				// Apply filter
+				m.filterIP = m.filterInput
+				m.filterInputMode = false
+				m.filterInput = ""
+				m.applyFilters()
+			case "esc":
+				// Cancel filter input
+				m.filterInputMode = false
+				m.filterInput = ""
+			case "backspace":
+				if len(m.filterInput) > 0 {
+					m.filterInput = m.filterInput[:len(m.filterInput)-1]
+				}
+			default:
+				// Add character to filter input
+				if len(msg.String()) == 1 {
+					m.filterInput += msg.String()
+				}
+			}
+			return m, nil
+		}
+
+		// Normal keyboard handling
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "esc":
+			// Clear all filters
+			m.filterIP = ""
+			m.filterStatus = 0
+			m.filterPath = ""
+			m.applyFilters()
 		case " ":
 			// Toggle pause
 			wasPaused := m.paused
@@ -71,6 +112,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if wasPaused && !m.paused {
 				return m, tickCmd(m.refreshRate)
 			}
+		case "i":
+			// Enter IP filter input mode
+			m.filterInputMode = true
+			m.filterInput = ""
+		case "2":
+			// Toggle 2xx filter
+			if m.filterStatus == 2 {
+				m.filterStatus = 0
+			} else {
+				m.filterStatus = 2
+			}
+			m.applyFilters()
+		case "3":
+			// Toggle 3xx filter
+			if m.filterStatus == 3 {
+				m.filterStatus = 0
+			} else {
+				m.filterStatus = 3
+			}
+			m.applyFilters()
+		case "4":
+			// Toggle 4xx filter
+			if m.filterStatus == 4 {
+				m.filterStatus = 0
+			} else {
+				m.filterStatus = 4
+			}
+			m.applyFilters()
+		case "5":
+			// Toggle 5xx filter
+			if m.filterStatus == 5 {
+				m.filterStatus = 0
+			} else {
+				m.filterStatus = 5
+			}
+			m.applyFilters()
 		case "+", "=":
 			// Decrease refresh interval (faster updates)
 			m.refreshRate = m.refreshRate / 2
@@ -101,13 +178,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.paused {
 			// Parse the log line
 			if visitor := parser.Parse(string(msg)); visitor != nil {
-				// Add to visitors list (keep last 100)
-				m.visitors = append([]parser.Visitor{*visitor}, m.visitors...)
-				if len(m.visitors) > 100 {
-					m.visitors = m.visitors[:100]
+				// Add to ALL visitors list (keep last 100)
+				m.allVisitors = append([]parser.Visitor{*visitor}, m.allVisitors...)
+				if len(m.allVisitors) > 100 {
+					m.allVisitors = m.allVisitors[:100]
 				}
 
-				// Update stats
+				// Apply filters to update the displayed visitors
+				m.applyFilters()
+
+				// Update stats (on unfiltered data)
 				m.uniqueIPs[visitor.IP]++
 				m.statusCodes[visitor.Status]++
 				m.topPaths[visitor.Path]++
@@ -190,14 +270,43 @@ func (m Model) View() string {
 		statusText = lipgloss.NewStyle().Foreground(warningColor).Bold(true).Render(" ⏸ PAUSED")
 	}
 
-	header := titleStyle.Render("🚀 TAILNGINX DASHBOARD") + statusText + "\n" +
+	// Build filter status text
+	var filterTexts []string
+	if m.filterIP != "" {
+		filterTexts = append(filterTexts, fmt.Sprintf("IP:%s", m.filterIP))
+	}
+	if m.filterStatus != 0 {
+		filterTexts = append(filterTexts, fmt.Sprintf("Status:%dxx", m.filterStatus))
+	}
+	if m.filterPath != "" {
+		filterTexts = append(filterTexts, fmt.Sprintf("Path:%s", m.filterPath))
+	}
+
+	filterStatus := ""
+	if len(filterTexts) > 0 {
+		filterStatus = lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render(
+			fmt.Sprintf(" 🔍 Filters: %s", strings.Join(filterTexts, ", ")),
+		)
+	}
+
+	helpText := "Press 'q' to quit, 'space' to pause, 'i' for IP filter, '2-5' for status filter, 'esc' to clear filters"
+	if m.filterInputMode {
+		helpText = fmt.Sprintf("Filter by IP: %s_ (Enter to apply, Esc to cancel)", m.filterInput)
+	}
+
+	header := titleStyle.Render("🚀 TAILNGINX DASHBOARD") + statusText + filterStatus + "\n" +
 		lipgloss.NewStyle().Foreground(dimColor).Render(
-			fmt.Sprintf("Running: %s  •  Refresh: %dms  •  Press 'q' to quit, 'space' to pause, '+/-' to adjust speed", uptime, refreshMs),
+			fmt.Sprintf("Running: %s  •  Refresh: %dms  •  %s", uptime, refreshMs, helpText),
 		)
 
 	// Overview metrics panel
+	totalText := fmt.Sprintf("%d", len(m.allVisitors))
+	if len(filterTexts) > 0 {
+		totalText = fmt.Sprintf("%d/%d", len(m.visitors), len(m.allVisitors))
+	}
+
 	overviewContent := headerStyle.Render("📊 Overview") + "\n" +
-		metricLabelStyle.Render("Total Requests") + metricValueStyle.Render(fmt.Sprintf("%d", len(m.visitors))) + "\n" +
+		metricLabelStyle.Render("Total Requests") + metricValueStyle.Render(totalText) + "\n" +
 		metricLabelStyle.Render("Unique Visitors") + metricValueStyle.Render(fmt.Sprintf("%d", len(m.uniqueIPs))) + "\n" +
 		metricLabelStyle.Render("Avg Bytes/Req") + metricValueStyle.Render(m.calculateAvgBytes())
 
@@ -411,6 +520,34 @@ func waitForLine(lines <-chan string) tea.Cmd {
 			return tea.Quit()
 		}
 		return logLineMsg(line)
+	}
+}
+
+// applyFilters filters the allVisitors list based on active filters
+func (m *Model) applyFilters() {
+	m.visitors = []parser.Visitor{}
+
+	for _, v := range m.allVisitors {
+		// Apply IP filter
+		if m.filterIP != "" && !strings.Contains(v.IP, m.filterIP) {
+			continue
+		}
+
+		// Apply status code filter
+		if m.filterStatus != 0 {
+			statusClass := v.Status / 100
+			if statusClass != m.filterStatus {
+				continue
+			}
+		}
+
+		// Apply path filter
+		if m.filterPath != "" && !strings.Contains(v.Path, m.filterPath) {
+			continue
+		}
+
+		// Passed all filters
+		m.visitors = append(m.visitors, v)
 	}
 }
 
