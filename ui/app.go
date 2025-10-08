@@ -29,10 +29,11 @@ type Model struct {
 	width       int
 	height      int
 	startTime   time.Time
+	refreshRate time.Duration
 }
 
 // NewApp creates a new Bubble Tea model
-func NewApp(lines <-chan string) *Model {
+func NewApp(lines <-chan string, refreshRate time.Duration) *Model {
 	return &Model{
 		lines:       lines,
 		visitors:    []parser.Visitor{},
@@ -42,13 +43,14 @@ func NewApp(lines <-chan string) *Model {
 		userAgents:  make(map[string]int),
 		methods:     make(map[string]int),
 		startTime:   time.Now(),
+		refreshRate: refreshRate,
 	}
 }
 
 // Init initializes the Bubble Tea program
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
-		tickCmd(),
+		tickCmd(m.refreshRate),
 		waitForLine(m.lines),
 	)
 }
@@ -60,6 +62,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			return m, tea.Quit
+		case "+", "=":
+			// Decrease refresh interval (faster updates)
+			m.refreshRate = m.refreshRate / 2
+			if m.refreshRate < 100*time.Millisecond {
+				m.refreshRate = 100 * time.Millisecond
+			}
+		case "-", "_":
+			// Increase refresh interval (slower updates)
+			m.refreshRate = m.refreshRate * 2
+			if m.refreshRate > 10*time.Second {
+				m.refreshRate = 10 * time.Second
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -67,7 +81,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 	case tickMsg:
-		return m, tickCmd()
+		return m, tickCmd(m.refreshRate)
 
 	case logLineMsg:
 		// Parse the log line
@@ -152,9 +166,10 @@ func (m Model) View() string {
 
 	// Header
 	uptime := time.Since(m.startTime).Round(time.Second)
+	refreshMs := m.refreshRate.Milliseconds()
 	header := titleStyle.Render("🚀 TAILNGINX DASHBOARD") + "\n" +
 		lipgloss.NewStyle().Foreground(dimColor).Render(
-			fmt.Sprintf("Running: %s  •  Press 'q' to quit", uptime),
+			fmt.Sprintf("Running: %s  •  Refresh: %dms  •  Press 'q' to quit, '+/-' to adjust speed", uptime, refreshMs),
 		)
 
 	// Overview metrics panel
@@ -358,9 +373,9 @@ func (m *Model) Run() error {
 	return err
 }
 
-// tickCmd returns a command that ticks every second
-func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+// tickCmd returns a command that ticks at the specified interval
+func tickCmd(interval time.Duration) tea.Cmd {
+	return tea.Tick(interval, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }

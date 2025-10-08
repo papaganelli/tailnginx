@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"time"
 
 	"github.com/papaganelli/tailnginx/internal/config"
 	"github.com/papaganelli/tailnginx/pkg/tailer"
@@ -11,9 +12,21 @@ import (
 
 func main() {
 	var cfg config.Config
+	var refreshMs int
+
 	flag.StringVar(&cfg.LogPath, "log", config.DefaultLogPath, "path to nginx access log")
 	flag.BoolVar(&cfg.FromEnd, "from-end", true, "start tailing from end of file")
+	flag.IntVar(&refreshMs, "refresh", 1000, "refresh rate in milliseconds (100-10000)")
 	flag.Parse()
+
+	// Convert milliseconds to duration and validate
+	cfg.RefreshRate = time.Duration(refreshMs) * time.Millisecond
+	if cfg.RefreshRate < config.MinRefreshRate {
+		cfg.RefreshRate = config.MinRefreshRate
+	}
+	if cfg.RefreshRate > config.MaxRefreshRate {
+		cfg.RefreshRate = config.MaxRefreshRate
+	}
 
 	done := make(chan struct{})
 	defer close(done)
@@ -23,7 +36,7 @@ func main() {
 		log.Fatalf("failed to tail file: %v", err)
 	}
 
-	app := ui.NewApp(lines)
+	app := ui.NewApp(lines, cfg.RefreshRate)
 	if err := app.Run(); err != nil {
 		log.Fatalf("app error: %v", err)
 	}
