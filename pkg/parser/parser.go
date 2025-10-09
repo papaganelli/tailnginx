@@ -16,11 +16,13 @@ type Visitor struct {
 	Protocol string
 	Status   int
 	Bytes    int
+	Referer  string
 	Agent    string
+	Country  string // Added by geoip lookup, not from log
 }
 
 // combinedRegex matches the nginx combined log format
-var combinedRegex = regexp.MustCompile(`(?P<ip>[^ ]+) [^ ]+ [^ ]+ \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>[^ ]+) (?P<proto>[^\"]+)" (?P<status>\d{3}) (?P<bytes>\d+|-) "[^"]*" "(?P<agent>[^"]+)"`)
+var combinedRegex = regexp.MustCompile(`(?P<ip>[^ ]+) [^ ]+ [^ ]+ \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>[^ ]+) (?P<proto>[^\"]+)" (?P<status>\d{3}) (?P<bytes>\d+|-) "(?P<referer>[^"]*)" "(?P<agent>[^"]+)"`)
 
 // Parse parses a nginx combined log line into a Visitor. Returns nil if the line doesn't match.
 func Parse(line string) *Visitor {
@@ -58,6 +60,8 @@ func Parse(line string) *Visitor {
 			} else if v, err := strconv.Atoi(val); err == nil {
 				result.Bytes = v
 			}
+		case "referer":
+			result.Referer = val
 		case "agent":
 			result.Agent = val
 		}

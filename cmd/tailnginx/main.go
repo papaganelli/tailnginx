@@ -45,7 +45,7 @@ func main() {
 		log.Fatalf("failed to tail file: %v", err)
 	}
 
-	app := ui.NewApp(lines, cfg.RefreshRate, geoLocator)
+	app := ui.NewTviewApp(lines, cfg.RefreshRate, geoLocator)
 	if err := app.Run(); err != nil {
 		log.Fatalf("app error: %v", err)
 	}

@@ -1,6 +1,6 @@
 # tailnginx
 
-A beautiful Go TUI application that monitors nginx access logs in real-time using Bubble Tea.
+A beautiful Go TUI application that monitors nginx access logs in real-time using tview.
 
 ## Features
 
@@ -11,11 +11,12 @@ A beautiful Go TUI application that monitors nginx access logs in real-time usin
 - 👥 Most active visitors by IP
 - 🌐 Browser/client detection (Chrome, Firefox, Safari, curl, bots, etc.)
 - 🌍 **IP Geolocation** - See visitor countries with embedded GeoIP database (no external files needed)
+- 🔗 **Top Referrers** - Track where your traffic comes from (search engines, social media, etc.)
 - ⚡ **Configurable refresh rate** - Adjust update speed from 100ms to 10s
 - ⏸️ **Pause/Resume** - Press space to pause/resume monitoring
-- 🔍 **Filtering** - Filter by IP address (press `i`) or HTTP status codes (press `2`-`5`)
+- 🔍 **Filtering** - Filter by HTTP status codes (press `2`-`5`)
 - 📝 Recent request stream with timestamps
-- 🎨 Beautiful TUI built with Bubble Tea and Lipgloss
+- 🎨 Professional TUI built with tview - elegant tables and automatic layouts
 
 ## Requirements
 
@@ -56,7 +57,6 @@ make build
 - `Space` - Pause/Resume monitoring
 - `+` - Increase refresh rate (faster updates)
 - `-` - Decrease refresh rate (slower updates)
-- `i` - Enter IP filter mode (type IP address, Enter to apply, Esc to cancel)
 - `2` - Filter 2xx status codes
 - `3` - Filter 3xx status codes
 - `4` - Filter 4xx status codes
@@ -107,6 +107,7 @@ The dashboard displays:
 - **Clients & Browsers** - User agent breakdown
 - **HTTP Methods** - GET, POST, PUT, DELETE, PATCH distribution
 - **Countries** - Geographic distribution of visitors (ISO country codes)
+- **Top Referrers** - Traffic sources (Google, HackerNews, Twitter, etc.)
 - **Recent Activity** - Live stream of incoming requests
 
 ## License
