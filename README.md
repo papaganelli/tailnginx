@@ -117,6 +117,44 @@ By default, tailnginx shows **all time** data. Press `t` to cycle through differ
 
 This makes it easy to focus on recent traffic or analyze historical patterns!
 
+### Request Rate Tracking
+
+The request rate feature displays real-time requests/second with trend indicators in the overview panel.
+
+**How it works:**
+- Uses a **10-minute rolling window** with 10-second buckets
+- Only tracks requests within the last 10 minutes from current time
+- Shows trend indicators: **↑** (green, >5% increase), **↓** (red, >5% decrease), **→** (yellow, stable)
+
+**Testing with sample logs:**
+
+The sample logs have been updated with recent timestamps for testing:
+
+```bash
+# Run with sample logs (shows rate metrics)
+./bin/tailnginx -log ./sample_logs/access.log
+```
+
+**Generate live logs for testing:**
+
+```bash
+# Terminal 1: Generate continuous logs
+./generate_live_logs.sh
+
+# Terminal 2: Monitor with rate tracking
+./bin/tailnginx -log ./sample_logs/access.log
+```
+
+**Why rate metrics might not appear:**
+- Log file contains entries older than 10 minutes
+- No recent activity in the last 10 minutes
+- Timestamps are in the future
+
+**Restore original sample logs:**
+```bash
+cp sample_logs/access.log.backup sample_logs/access.log
+```
+
 ## Development
 
 ```bash
