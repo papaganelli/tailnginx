@@ -18,7 +18,6 @@ linters:
     - gosec         # Security focused linter
     - bodyclose     # Check for HTTP response body close
     - noctx         # Find HTTP requests without context
-    - exportloopref # Check for exporting loop variables
     - goconst       # Find repeated strings that could be constants
     - unconvert     # Remove unnecessary type conversions
     - unparam       # Find unused function parameters
