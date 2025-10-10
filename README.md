@@ -7,6 +7,8 @@
 
 A beautiful, secure Go TUI application that monitors nginx access logs in real-time using tview.
 
+![tailnginx dashboard](docs/screenshot.png)
+
 ## Features
 
 ### 🚀 Monitoring
