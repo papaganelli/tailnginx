@@ -1,8 +1,9 @@
-BINARY=tailnginx
+BINARY=bin/tailnginx
 
 .PHONY: build run test tidy
 
 build:
+	mkdir -p bin
 	go build -o $(BINARY) ./cmd/tailnginx
 
 run: build

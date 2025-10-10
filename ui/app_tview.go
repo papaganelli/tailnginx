@@ -33,6 +33,7 @@ type TviewApp struct {
 
 	// Data
 	lines           <-chan string
+	logFilePath     string // Path to the log file being monitored
 	visitors        []parser.Visitor
 	allVisitors     []parser.Visitor
 	statusCodes     map[int]int
@@ -47,27 +48,38 @@ type TviewApp struct {
 	paused          bool
 	refreshRate     time.Duration
 	statusFilter    int
+	timeWindow      time.Duration // Current time window (0 = all time)
+	timeWindowIndex int           // Index in timeWindowPresets
+	dataChanged     bool          // Flag to indicate new data arrived
 	geoLocator      *geoip.Locator
 }
 
+// Time window presets (in minutes)
+var timeWindowPresets = []int{5, 30, 60, 180, 720, 1440, 10080, 43200, 0} // 5m, 30m, 1h, 3h, 12h, 1d, 7d, 30d, all time
+
 // NewTviewApp creates a new tview-based application.
-func NewTviewApp(lines <-chan string, refreshRate time.Duration, geoLocator *geoip.Locator) *TviewApp {
+func NewTviewApp(lines <-chan string, logFilePath string, refreshRate time.Duration, geoLocator *geoip.Locator) *TviewApp {
+	app := tview.NewApplication()
+
 	ta := &TviewApp{
-		app:           tview.NewApplication(),
-		lines:         lines,
-		visitors:      []parser.Visitor{},
-		allVisitors:   []parser.Visitor{},
-		statusCodes:   make(map[int]int),
-		pathsData:     make(map[string]int),
-		ips:           make(map[string]int),
-		userAgents:    make(map[string]int),
-		methodsData:   make(map[string]int),
-		countriesData: make(map[string]int),
-		referersData:  make(map[string]int),
-		logLines:      make([]string, 0),
-		startTime:     time.Now(),
-		refreshRate:   refreshRate,
-		geoLocator:    geoLocator,
+		app:             app,
+		lines:           lines,
+		logFilePath:     logFilePath,
+		visitors:        []parser.Visitor{},
+		allVisitors:     []parser.Visitor{},
+		statusCodes:     make(map[int]int),
+		pathsData:       make(map[string]int),
+		ips:             make(map[string]int),
+		userAgents:      make(map[string]int),
+		methodsData:     make(map[string]int),
+		countriesData:   make(map[string]int),
+		referersData:    make(map[string]int),
+		logLines:        make([]string, 0),
+		startTime:       time.Now(),
+		refreshRate:     refreshRate,
+		timeWindow:      0,                                    // Default: all time
+		timeWindowIndex: len(timeWindowPresets) - 1,          // Last preset (all time)
+		geoLocator:      geoLocator,
 	}
 
 	ta.initUI()
@@ -92,18 +104,19 @@ func (ta *TviewApp) initUI() {
 	ta.referersTable = ta.createTable("🔗 Sources", borderColor, titleColor)
 	ta.logStream = ta.createTextView("📝 Live Stream", borderColor, titleColor)
 
-	// Create header
+	// Create header with log file path
+	headerText := fmt.Sprintf("[white::b] TAILNGINX [-::-] [::d]%s[-::-]", ta.logFilePath)
 	header := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText("[white::b] TAILNGINX [-::-] Nginx Log Monitor")
+		SetText(headerText)
 	header.SetBackgroundColor(headerBg)
 
 	// Create footer with help text
 	footer := tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignCenter).
-		SetText("[yellow]q[-::-]:quit  [yellow]space[-::-]:pause  [yellow]±[-::-]:speed  [yellow]2-5[-::-]:filter  [yellow]esc[-::-]:clear")
+		SetText("[yellow]q[-::-]:quit  [yellow]space[-::-]:pause  [yellow]±[-::-]:speed  [yellow]t[-::-]:window  [yellow]2-5[-::-]:filter  [yellow]esc[-::-]:clear")
 	footer.SetBackgroundColor(headerBg)
 
 	// Create main grid layout
@@ -174,27 +187,45 @@ func (ta *TviewApp) initUI() {
 			ta.mu.Lock()
 			ta.statusFilter = 2
 			ta.applyFilters()
+			ta.dataChanged = true
 			ta.mu.Unlock()
 		case '3':
 			ta.mu.Lock()
 			ta.statusFilter = 3
 			ta.applyFilters()
+			ta.dataChanged = true
 			ta.mu.Unlock()
 		case '4':
 			ta.mu.Lock()
 			ta.statusFilter = 4
 			ta.applyFilters()
+			ta.dataChanged = true
 			ta.mu.Unlock()
 		case '5':
 			ta.mu.Lock()
 			ta.statusFilter = 5
 			ta.applyFilters()
+			ta.dataChanged = true
+			ta.mu.Unlock()
+		case 't', 'T':
+			// Toggle time window to next preset
+			ta.mu.Lock()
+			ta.timeWindowIndex = (ta.timeWindowIndex + 1) % len(timeWindowPresets)
+			preset := timeWindowPresets[ta.timeWindowIndex]
+			if preset == 0 {
+				ta.timeWindow = 0 // All time
+			} else {
+				ta.timeWindow = time.Duration(preset) * time.Minute
+			}
+			ta.applyFilters()
+			ta.dataChanged = true
 			ta.mu.Unlock()
 		}
 		if event.Key() == tcell.KeyEscape {
 			ta.mu.Lock()
 			ta.statusFilter = 0
 			ta.applyFilters()
+			ta.dataChanged = true
 			ta.mu.Unlock()
 		}
 		return event
@@ -233,7 +264,7 @@ func (ta *TviewApp) createTable(title string, borderColor, titleColor tcell.Colo
 
 // Run starts the tview application.
 func (ta *TviewApp) Run() error {
-	// Start log reader goroutine
+	// Start log reader goroutine BEFORE running app
 	go ta.readLines()
 
 	// Start update ticker
@@ -245,34 +276,80 @@ func (ta *TviewApp) Run() error {
 
 // readLines reads log lines from the channel.
 func (ta *TviewApp) readLines() {
-	for line := range ta.lines {
-		if v := parser.Parse(line); v != nil {
-			// Add country information if available
-			if ta.geoLocator != nil {
-				if loc, err := ta.geoLocator.Lookup(v.IP); err == nil && loc != nil {
-					v.Country = loc.Country
+	batch := make([]parser.Visitor, 0, 100)
+	batchTicker := time.NewTicker(100 * time.Millisecond)
+	defer batchTicker.Stop()
+
+	for {
+		select {
+		case line, ok := <-ta.lines:
+			if !ok {
+				// Channel closed, flush remaining batch
+				if len(batch) > 0 {
+					ta.processBatch(batch)
+				}
+				return
+			}
+
+			if v := parser.Parse(line); v != nil {
+				// Add country information if available
+				if ta.geoLocator != nil {
+					if loc, err := ta.geoLocator.Lookup(v.IP); err == nil && loc != nil {
+						v.Country = loc.Country
+					}
+				}
+				batch = append(batch, *v)
+
+				// Process batch when it reaches 100 entries
+				if len(batch) >= 100 {
+					ta.processBatch(batch)
+					batch = make([]parser.Visitor, 0, 100)
 				}
 			}
 
-			ta.mu.Lock()
-			ta.allVisitors = append(ta.allVisitors, *v)
-			// Keep only last 1000 visitors in memory
-			if len(ta.allVisitors) > 1000 {
-				ta.allVisitors = ta.allVisitors[len(ta.allVisitors)-1000:]
+		case <-batchTicker.C:
+			// Process batch periodically even if not full
+			if len(batch) > 0 {
+				ta.processBatch(batch)
+				batch = make([]parser.Visitor, 0, 100)
 			}
-			ta.applyFilters()
-			ta.mu.Unlock()
 		}
 	}
 }
 
-// applyFilters filters visitors based on current filters.
+// processBatch processes a batch of visitors and updates the UI
+func (ta *TviewApp) processBatch(batch []parser.Visitor) {
+	ta.mu.Lock()
+	defer ta.mu.Unlock()
+
+	ta.allVisitors = append(ta.allVisitors, batch...)
+	// Keep only last 10000 visitors in memory
+	if len(ta.allVisitors) > 10000 {
+		ta.allVisitors = ta.allVisitors[len(ta.allVisitors)-10000:]
+	}
+	ta.applyFilters()
+	ta.dataChanged = true
+}
+
+// applyFilters filters visitors based on current filters (status and time window).
 func (ta *TviewApp) applyFilters() {
 	ta.visitors = nil
+	now := time.Now()
+
 	for _, v := range ta.allVisitors {
+		// Apply status filter
 		if ta.statusFilter > 0 && v.Status/100 != ta.statusFilter {
 			continue
 		}
+
+		// Apply time window filter
+		if ta.timeWindow > 0 {
+			age := now.Sub(v.Time)
+			if age > ta.timeWindow {
+				continue // Entry is too old
+			}
+		}
+
 		ta.visitors = append(ta.visitors, v)
 	}
 }
@@ -285,9 +362,12 @@ func (ta *TviewApp) updateLoop() {
 	for range ticker.C {
 		ta.mu.Lock()
 		paused := ta.paused
+		changed := ta.dataChanged
+		ta.dataChanged = false // Reset flag
 		ta.mu.Unlock()
 
-		if !paused {
+		// Only update if not paused AND data actually changed
+		if !paused && changed {
 			ta.mu.Lock()
 			ta.updateData()
 			ta.mu.Unlock()
@@ -379,13 +459,28 @@ func (ta *TviewApp) renderOverview() {
 		filterText = fmt.Sprintf("[cyan]%dxx[-::-]", ta.statusFilter)
 	}
 
+	// Format time window
+	windowText := "[green]All time[-::-]"
+	if ta.timeWindow > 0 {
+		minutes := int(ta.timeWindow.Minutes())
+		if minutes >= 1440 { // >= 1 day
+			days := minutes / 1440
+			windowText = fmt.Sprintf("[green]%dd[-::-]", days)
+		} else if minutes >= 60 { // >= 1 hour
+			hours := minutes / 60
+			windowText = fmt.Sprintf("[green]%dh[-::-]", hours)
+		} else {
+			windowText = fmt.Sprintf("[green]%dm[-::-]", minutes)
+		}
+	}
+
 	text := fmt.Sprintf(
-		"  [::b]Requests:[-::-] [white]%d[-::-] / [::d]%d[-::-]  •  [::b]Uptime:[-::-] [white]%s[-::-]  •  [::b]Status:[-::-] %s  •  [::b]Refresh:[-::-] [white]%dms[-::-]  •  [::b]Filter:[-::-] %s",
+		"  [::b]Requests:[-::-] [white]%d[-::-] / [::d]%d[-::-]  •  [::b]Window:[-::-] %s  •  [::b]Uptime:[-::-] [white]%s[-::-]  •  [::b]Status:[-::-] %s  •  [::b]Filter:[-::-] %s",
 		totalRequests,
 		totalAll,
+		windowText,
 		uptime,
 		status,
-		ta.refreshRate.Milliseconds(),
 		filterText,
 	)
 

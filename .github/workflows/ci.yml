@@ -25,8 +25,26 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
       - name: Run tests
         run: go test -v ./...
+
+      - name: Run tests with race detector
+        run: go test -race -short ./...
+
+      - name: Run tests with coverage
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.out
+          fail_ci_if_error: false
 
       - name: Build
         run: go build -v ./cmd/tailnginx

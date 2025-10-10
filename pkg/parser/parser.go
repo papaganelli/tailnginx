@@ -24,7 +24,10 @@ type Visitor struct {
 // combinedRegex matches the nginx combined log format
 var combinedRegex = regexp.MustCompile(`(?P<ip>[^ ]+) [^ ]+ [^ ]+ \[(?P<time>[^\]]+)\] "(?P<method>\S+) (?P<path>[^ ]+) (?P<proto>[^\"]+)" (?P<status>\d{3}) (?P<bytes>\d+|-) "(?P<referer>[^"]*)" "(?P<agent>[^"]+)"`)
 
-// Parse parses a nginx combined log line into a Visitor. Returns nil if the line doesn't match.
+// Parse parses a nginx combined log format line into a Visitor struct.
+// It expects the standard nginx combined log format:
+// <IP> - - [<time>] "<method> <path> <proto>" <status> <bytes> "<referer>" "<agent>"
+// Returns nil if the line doesn't match the expected format or parsing fails.
 func Parse(line string) *Visitor {
 	m := combinedRegex.FindStringSubmatch(line)
 	if m == nil {
