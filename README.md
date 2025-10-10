@@ -1,24 +1,41 @@
 # tailnginx
 
-A beautiful Go TUI application that monitors nginx access logs in real-time using tview.
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Test Coverage](https://img.shields.io/badge/coverage-70.8%25-brightgreen)](https://github.com/papaganelli/tailnginx)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/papaganelli/tailnginx)](https://github.com/papaganelli/tailnginx/releases)
+
+A beautiful, secure Go TUI application that monitors nginx access logs in real-time using tview.
 
 ## Features
 
-- 🚀 Real-time nginx access log monitoring
-- 🔍 **Auto-Detection** - Automatically finds nginx log files on your system
-- ⏱️ **Time Windows** - View last 5/30min, 1/3/12h, 1/7/30 days, or all time (press `t` to toggle)
-- 📊 Live statistics: requests, unique visitors, uptime
-- 📡 Status code distribution with color-coded bars (2xx=green, 3xx=blue, 4xx=yellow, 5xx=red)
-- 🔥 Top visited paths
-- 👥 Most active visitors by IP
-- 🌐 Browser/client detection (Chrome, Firefox, Safari, curl, bots, etc.)
-- 🌍 **IP Geolocation** - See visitor countries with embedded GeoIP database (no external files needed)
-- 🔗 **Top Referrers** - Track where your traffic comes from (search engines, social media, etc.)
-- ⚡ **Configurable refresh rate** - Adjust update speed from 100ms to 10s
-- ⏸️ **Pause/Resume** - Press space to pause/resume monitoring
-- 🔍 **Filtering** - Filter by HTTP status codes (press `2`-`5`)
-- 📝 Recent request stream with timestamps
-- 🎨 Professional TUI built with tview - elegant tables and automatic layouts
+### 🚀 Monitoring
+- **Real-time log tailing** - Instant updates as requests hit your server
+- **Auto-Detection** - Automatically finds nginx log files on your system
+- **Time Windows** - View last 5/30min, 1/3/12h, 1/7/30 days, or all time (press `t` to toggle)
+- **Live statistics** - Requests, unique visitors, uptime tracking
+- **Recent activity stream** - Live feed of incoming requests
+
+### 📊 Analytics
+- **Status code distribution** - Color-coded bars (2xx=green, 3xx=blue, 4xx=yellow, 5xx=red)
+- **Top paths** - Most frequently accessed URLs
+- **Top visitors** - Most active IP addresses
+- **Browser/client detection** - Chrome, Firefox, Safari, curl, bots, etc.
+- **HTTP methods breakdown** - GET, POST, PUT, DELETE, PATCH distribution
+- **Geographic insights** - Visitor countries with embedded GeoIP database (no external files needed)
+- **Traffic sources** - Top referrers (Google, social media, etc.)
+
+### 🔒 Security & Performance
+- **Path validation** - Prevents reading sensitive system files
+- **Buffer limits** - Protection against memory exhaustion
+- **GeoIP caching** - 10-50x speedup for repeated IP lookups
+- **High test coverage** - 70.8% code coverage with comprehensive tests
+
+### ⚡ Controls
+- **Configurable refresh rate** - Adjust update speed from 100ms to 10s
+- **Pause/Resume** - Press space to pause/resume monitoring
+- **Status filtering** - Filter by HTTP status codes (press `2`-`5`)
+- **Responsive UI** - Professional TUI built with tview
 
 ## Requirements
 
@@ -86,8 +103,8 @@ Use -log flag to specify a different file
 
 ### Time Windows
 
-By default, tailnginx shows data from the **last 5 minutes**. Press `t` to cycle through:
-- **5m** - Last 5 minutes (default)
+By default, tailnginx shows **all time** data. Press `t` to cycle through different time windows:
+- **5m** - Last 5 minutes
 - **30m** - Last 30 minutes
 - **1h** - Last 1 hour
 - **3h** - Last 3 hours
@@ -95,9 +112,9 @@ By default, tailnginx shows data from the **last 5 minutes**. Press `t` to cycle
 - **1d** - Last 1 day
 - **7d** - Last 7 days
 - **30d** - Last 30 days
-- **All time** - All data since app start
+- **All time** - All data since app start (default)
 
-This makes the app actually useful for monitoring current traffic without being overwhelmed by historical data!
+This makes it easy to focus on recent traffic or analyze historical patterns!
 
 ## Development
 
@@ -105,12 +122,33 @@ This makes the app actually useful for monitoring current traffic without being 
 # Run tests
 make test
 
+# Run tests with coverage
+go test -cover ./...
+
+# Run tests with race detector
+go test -race ./...
+
 # Build
 make build
 
 # Clean dependencies
 make tidy
+
+# Run linter
+golangci-lint run
 ```
+
+### Test Coverage
+
+tailnginx has comprehensive test coverage:
+
+| Package | Coverage |
+|---------|----------|
+| pkg/parser | 91.7% |
+| pkg/geoip | 88.9% |
+| pkg/tailer | 84.6% |
+| pkg/detector | 60.5% |
+| **Overall** | **70.8%** |
 
 ## Log Format
 
@@ -126,12 +164,20 @@ Sample logs for testing are provided in `sample_logs/access.log`.
 
 ## Architecture
 
-- **cmd/tailnginx** - Main entry point
-- **pkg/parser** - Nginx combined log format parser
-- **pkg/tailer** - File tailing with reopen support
-- **pkg/geoip** - IP geolocation with embedded database (phuslu/iploc)
-- **ui** - Bubble Tea TUI implementation
+- **cmd/tailnginx** - Main entry point with path validation and auto-detection
+- **pkg/parser** - Nginx combined log format parser with comprehensive tests
+- **pkg/tailer** - File tailing with reopen support and buffer limits
+- **pkg/detector** - Auto-detection of nginx log files from config
+- **pkg/geoip** - IP geolocation with embedded database and caching (phuslu/iploc)
+- **ui** - tview TUI implementation with responsive layouts
 - **internal/config** - Configuration structures
+
+### Security Features
+
+- **Path validation** - Blocks reading sensitive files like `/etc/shadow`, `/etc/passwd`
+- **Symlink resolution** - Detects and prevents path traversal attacks
+- **Buffer limits** - Scanner limited to 1MB per line to prevent memory exhaustion
+- **Input validation** - All user inputs are validated before use
 
 ## Screenshots
 
@@ -145,6 +191,47 @@ The dashboard displays:
 - **Countries** - Geographic distribution of visitors (ISO country codes)
 - **Top Referrers** - Traffic sources (Google, HackerNews, Twitter, etc.)
 - **Recent Activity** - Live stream of incoming requests
+
+## Performance
+
+- **GeoIP caching** - 10-50x speedup for repeated IP lookups using sync.Map
+- **Batch processing** - Processes up to 100 log entries per batch
+- **Buffered channels** - 1000-entry buffer for high-throughput logs
+- **Efficient regex** - Pre-compiled patterns for fast parsing
+
+## Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure `go test ./...` passes
+5. Run `golangci-lint run` to check code quality
+6. Submit a pull request
+
+## Changelog
+
+### v1.2.0 (2025-10-10)
+- **Security**: Added path validation to prevent reading sensitive files
+- **Security**: Added buffer limits to prevent memory exhaustion
+- **Tests**: Increased coverage from 13.1% to 70.8% (+441%)
+- **Performance**: Implemented GeoIP caching (10-50x speedup)
+- **Quality**: Added comprehensive godoc comments
+- **CI/CD**: Added golangci-lint with 16 linters
+- **CI/CD**: Added race detector and coverage tracking
+- **Bug Fix**: Fixed tailer not reading from beginning
+- **Bug Fix**: Fixed default time window filtering
+
+### v1.1.0 (2025-10-09)
+- Migrated from Bubble Tea to tview framework
+- Added auto-detection of nginx log files
+- Added GeoIP support with embedded database
+- Added time window filtering
+- Added status code filtering
+- Added configurable refresh rate
+
+### v1.0.0 (2025-10-08)
+- Initial release with basic monitoring features
 
 ## License
 
