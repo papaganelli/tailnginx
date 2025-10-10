@@ -42,3 +42,4 @@ Thumbs.db
 
 # Claude Code documentation
 CLAUDE.md
+sample_logs/*.backup

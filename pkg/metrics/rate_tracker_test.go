@@ -58,7 +58,7 @@ func TestMultipleBuckets(t *testing.T) {
 	baseTime := time.Now()
 
 	// Add requests across multiple time buckets
-	rt.RecordN(baseTime, 50)                      // Bucket 0
+	rt.RecordN(baseTime, 50)                     // Bucket 0
 	rt.RecordN(baseTime.Add(15*time.Second), 60) // Bucket 1
 	rt.RecordN(baseTime.Add(25*time.Second), 70) // Bucket 2
 

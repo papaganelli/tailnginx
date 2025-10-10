@@ -489,8 +489,7 @@ func (ta *TviewApp) renderOverview() {
 	rateText := ""
 	if stats.Total > 0 {
 		// Format rate with trend indicator
-		trendIndicator := ""
-		trendColor := "white"
+		var trendIndicator, trendColor string
 		if stats.TrendChange > 5 {
 			trendIndicator = "↑"
 			trendColor = "green"

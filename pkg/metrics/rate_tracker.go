@@ -9,12 +9,12 @@ import (
 // RateTracker tracks request rates over time using a circular buffer.
 type RateTracker struct {
 	mu           sync.RWMutex
-	buckets      []int       // Requests per time bucket
-	timestamps   []time.Time // Timestamp for each bucket
-	currentIndex int         // Current position in circular buffer
-	bucketSize   time.Duration
-	windowSize   int // Number of buckets to keep
-	totalCount   int // Total requests across all buckets
+	buckets      []int         // Requests per time bucket
+	timestamps   []time.Time   // Timestamp for each bucket
+	bucketSize   time.Duration // Duration of each bucket
+	currentIndex int           // Current position in circular buffer
+	windowSize   int           // Number of buckets to keep
+	totalCount   int           // Total requests across all buckets
 }
 
 // NewRateTracker creates a new RateTracker.
