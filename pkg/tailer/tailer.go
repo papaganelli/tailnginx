@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/hpcloud/tail"
+	"github.com/nxadm/tail"
 )
 
 // TailLines tails the given file path and sends lines to the returned channel.
