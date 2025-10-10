@@ -17,6 +17,7 @@ A beautiful, secure Go TUI application that monitors nginx access logs in real-t
 - **Recent activity stream** - Live feed of incoming requests
 
 ### 📊 Analytics
+- **Request rate tracking** - Real-time requests/second with trend indicators (↑/↓/→)
 - **Status code distribution** - Color-coded bars (2xx=green, 3xx=blue, 4xx=yellow, 5xx=red)
 - **Top paths** - Most frequently accessed URLs
 - **Top visitors** - Most active IP addresses
@@ -147,6 +148,7 @@ tailnginx has comprehensive test coverage:
 | pkg/parser | 91.7% |
 | pkg/geoip | 88.9% |
 | pkg/tailer | 84.6% |
+| pkg/metrics | 100.0% |
 | pkg/detector | 60.5% |
 | **Overall** | **70.8%** |
 
@@ -169,6 +171,7 @@ Sample logs for testing are provided in `sample_logs/access.log`.
 - **pkg/tailer** - File tailing with reopen support and buffer limits
 - **pkg/detector** - Auto-detection of nginx log files from config
 - **pkg/geoip** - IP geolocation with embedded database and caching (phuslu/iploc)
+- **pkg/metrics** - Request rate tracking with circular buffer and trend analysis
 - **ui** - tview TUI implementation with responsive layouts
 - **internal/config** - Configuration structures
 
@@ -182,7 +185,7 @@ Sample logs for testing are provided in `sample_logs/access.log`.
 ## Screenshots
 
 The dashboard displays:
-- **Overview** - Total requests, unique visitors, average bytes per request
+- **Overview** - Total requests, request rate (req/s) with trend indicators, uptime, filters
 - **HTTP Status Codes** - Visual bars showing status code distribution
 - **Top Paths** - Most frequently accessed URLs
 - **Top Visitors** - Most active IP addresses
@@ -194,6 +197,7 @@ The dashboard displays:
 
 ## Performance
 
+- **Request rate tracking** - Circular buffer with 10-second buckets over 10-minute window
 - **GeoIP caching** - 10-50x speedup for repeated IP lookups using sync.Map
 - **Batch processing** - Processes up to 100 log entries per batch
 - **Buffered channels** - 1000-entry buffer for high-throughput logs
@@ -210,6 +214,13 @@ Contributions are welcome! Please:
 6. Submit a pull request
 
 ## Changelog
+
+### v1.3.0 (2025-10-10)
+- **Feature**: Added real-time request rate tracking (requests/second)
+- **Feature**: Added trend indicators for rate changes (↑ increasing, ↓ decreasing, → stable)
+- **Performance**: Implemented circular buffer for efficient rate calculation (10-minute window)
+- **Architecture**: Migrated from archived hpcloud/tail to actively maintained nxadm/tail
+- **Tests**: Added comprehensive metrics package tests (100% coverage)
 
 ### v1.2.0 (2025-10-10)
 - **Security**: Added path validation to prevent reading sensitive files

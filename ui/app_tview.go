@@ -10,6 +10,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/papaganelli/tailnginx/pkg/geoip"
+	"github.com/papaganelli/tailnginx/pkg/metrics"
 	"github.com/papaganelli/tailnginx/pkg/parser"
 	"github.com/rivo/tview"
 )
@@ -31,6 +32,7 @@ type TviewApp struct {
 	lines           <-chan string
 	grid            *tview.Grid
 	geoLocator      *geoip.Locator
+	rateTracker     *metrics.RateTracker
 	referersData    map[string]int
 	countriesData   map[string]int
 	userAgents      map[string]int
@@ -82,6 +84,7 @@ func NewTviewApp(lines <-chan string, logFilePath string, refreshRate time.Durat
 		timeWindow:      0,                          // Default: all time
 		timeWindowIndex: len(timeWindowPresets) - 1, // Last preset (all time)
 		geoLocator:      geoLocator,
+		rateTracker:     metrics.NewRateTracker(10*time.Second, 60), // 10-minute window with 10s buckets
 	}
 
 	ta.initUI()
@@ -324,6 +327,11 @@ func (ta *TviewApp) processBatch(batch []parser.Visitor) {
 	ta.mu.Lock()
 	defer ta.mu.Unlock()
 
+	// Record requests in rate tracker
+	for _, v := range batch {
+		ta.rateTracker.Record(v.Time)
+	}
+
 	ta.allVisitors = append(ta.allVisitors, batch...)
 	// Keep only last 10000 visitors in memory
 	if len(ta.allVisitors) > 10000 {
@@ -476,14 +484,35 @@ func (ta *TviewApp) renderOverview() {
 		}
 	}
 
+	// Get rate statistics
+	stats := ta.rateTracker.GetStats()
+	rateText := ""
+	if stats.Total > 0 {
+		// Format rate with trend indicator
+		trendIndicator := ""
+		trendColor := "white"
+		if stats.TrendChange > 5 {
+			trendIndicator = "↑"
+			trendColor = "green"
+		} else if stats.TrendChange < -5 {
+			trendIndicator = "↓"
+			trendColor = "red"
+		} else {
+			trendIndicator = "→"
+			trendColor = "yellow"
+		}
+		rateText = fmt.Sprintf("  •  [::b]Rate:[-::-] [white]%.1f req/s[-::-] [%s]%s[-::-]", stats.Current, trendColor, trendIndicator)
+	}
+
 	text := fmt.Sprintf(
-		"  [::b]Requests:[-::-] [white]%d[-::-] / [::d]%d[-::-]  •  [::b]Window:[-::-] %s  •  [::b]Uptime:[-::-] [white]%s[-::-]  •  [::b]Status:[-::-] %s  •  [::b]Filter:[-::-] %s",
+		"  [::b]Requests:[-::-] [white]%d[-::-] / [::d]%d[-::-]  •  [::b]Window:[-::-] %s  •  [::b]Uptime:[-::-] [white]%s[-::-]  •  [::b]Status:[-::-] %s  •  [::b]Filter:[-::-] %s%s",
 		totalRequests,
 		totalAll,
 		windowText,
 		uptime,
 		status,
 		filterText,
+		rateText,
 	)
 
 	ta.overview.SetText(text)
