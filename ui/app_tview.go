@@ -16,42 +16,38 @@ import (
 
 // TviewApp represents the tview-based application.
 type TviewApp struct {
-	app  *tview.Application
-	grid *tview.Grid
-	mu   sync.RWMutex
-
-	// Panels
-	overview       *tview.TextView
-	statusTable    *tview.Table
-	pathsTable     *tview.Table
-	visitorsTable  *tview.Table
-	clientsTable   *tview.Table
-	methodsTable   *tview.Table
-	countriesTable *tview.Table
-	referersTable  *tview.Table
-	logStream      *tview.TextView
-
-	// Data
-	lines           <-chan string
-	logFilePath     string // Path to the log file being monitored
-	visitors        []parser.Visitor
-	allVisitors     []parser.Visitor
+	startTime       time.Time
 	statusCodes     map[int]int
 	pathsData       map[string]int
-	ips             map[string]int
-	userAgents      map[string]int
-	methodsData     map[string]int
-	countriesData   map[string]int
-	referersData    map[string]int
-	logLines        []string
+	overview        *tview.TextView
+	statusTable     *tview.Table
+	pathsTable      *tview.Table
+	visitorsTable   *tview.Table
+	clientsTable    *tview.Table
+	methodsTable    *tview.Table
+	countriesTable  *tview.Table
+	referersTable   *tview.Table
+	logStream       *tview.TextView
+	lines           <-chan string
+	grid            *tview.Grid
 	geoLocator      *geoip.Locator
-	startTime       time.Time
+	referersData    map[string]int
+	countriesData   map[string]int
+	userAgents      map[string]int
+	ips             map[string]int
+	app             *tview.Application
+	methodsData     map[string]int
+	logFilePath     string
+	allVisitors     []parser.Visitor
+	logLines        []string
+	visitors        []parser.Visitor
 	refreshRate     time.Duration
-	timeWindow      time.Duration // Current time window (0 = all time)
+	timeWindow      time.Duration
 	statusFilter    int
-	timeWindowIndex int // Index in timeWindowPresets
+	timeWindowIndex int
+	mu              sync.RWMutex
 	paused          bool
-	dataChanged     bool // Flag to indicate new data arrived
+	dataChanged     bool
 }
 
 // Time window presets (in minutes)
@@ -696,7 +692,6 @@ var countryCodeToName = map[string]string{
 	"TR": "Turkey", "IL": "Israel", "AE": "United Arab Emirates", "SA": "Saudi Arabia",
 	"EG": "Egypt", "NG": "Nigeria", "KE": "Kenya", "UA": "Ukraine",
 }
-
 
 // getCountryName returns the full country name for a country code.
 func getCountryName(countryCode string) string {

@@ -9,8 +9,8 @@ import (
 func TestGetBestLogFile(t *testing.T) {
 	tests := []struct {
 		name     string
-		logs     []LogFile
 		expected string
+		logs     []LogFile
 	}{
 		{
 			name:     "empty list",
