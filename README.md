@@ -128,32 +128,33 @@ The request rate feature displays real-time requests/second with trend indicator
 
 **Testing with sample logs:**
 
-The sample logs have been updated with recent timestamps for testing:
+Sample logs may need fresh timestamps to show rate metrics:
 
 ```bash
-# Run with sample logs (shows rate metrics)
+# Update sample logs with current timestamps (if needed)
+./update_sample_logs.sh
+
+# Run with sample logs - rate metrics should appear
 ./bin/tailnginx -log ./sample_logs/access.log
 ```
 
-**Generate live logs for testing:**
+**Generate live logs for continuous testing:**
 
 ```bash
-# Terminal 1: Generate continuous logs
+# Terminal 1: Generate continuous logs with current timestamps
 ./generate_live_logs.sh
 
-# Terminal 2: Monitor with rate tracking
+# Terminal 2: Monitor with live rate tracking
 ./bin/tailnginx -log ./sample_logs/access.log
 ```
 
 **Why rate metrics might not appear:**
-- Log file contains entries older than 10 minutes
+- **Most common**: Sample log timestamps are older than 10 minutes
+  - **Solution**: Run `./update_sample_logs.sh` to refresh timestamps
 - No recent activity in the last 10 minutes
 - Timestamps are in the future
 
-**Restore original sample logs:**
-```bash
-cp sample_logs/access.log.backup sample_logs/access.log
-```
+**Note**: The rate tracker is designed for real-time monitoring. For production nginx logs with live traffic, rate metrics work automatically without any timestamp updates.
 
 ## Development
 
