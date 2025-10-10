@@ -14,33 +14,33 @@ func TestGetBestLogFile(t *testing.T) {
 	}{
 		{
 			name:     "empty list",
-			logs:     []LogFile{},
 			expected: "",
+			logs:     []LogFile{},
 		},
 		{
-			name: "prefer main access.log",
+			name:     "prefer main access.log",
+			expected: "/var/log/nginx/access.log",
 			logs: []LogFile{
 				{Path: "/var/log/nginx/access.log.1", Size: 5000},
 				{Path: "/var/log/nginx/access.log", Size: 1000},
 				{Path: "/var/log/nginx/error.log", Size: 3000},
 			},
-			expected: "/var/log/nginx/access.log",
 		},
 		{
-			name: "largest file when no access.log",
+			name:     "largest file when no access.log",
+			expected: "/var/log/nginx/custom.log",
 			logs: []LogFile{
 				{Path: "/var/log/nginx/error.log", Size: 1000},
 				{Path: "/var/log/nginx/custom.log", Size: 5000},
 				{Path: "/var/log/nginx/debug.log", Size: 2000},
 			},
-			expected: "/var/log/nginx/custom.log",
 		},
 		{
-			name: "single file",
+			name:     "single file",
+			expected: "/var/log/nginx/access.log",
 			logs: []LogFile{
 				{Path: "/var/log/nginx/access.log", Size: 1000},
 			},
-			expected: "/var/log/nginx/access.log",
 		},
 	}
 

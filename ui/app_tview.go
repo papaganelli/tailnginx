@@ -16,9 +16,9 @@ import (
 
 // TviewApp represents the tview-based application.
 type TviewApp struct {
-	app      *tview.Application
-	grid     *tview.Grid
-	mu       sync.RWMutex
+	app  *tview.Application
+	grid *tview.Grid
+	mu   sync.RWMutex
 
 	// Panels
 	overview       *tview.TextView
@@ -44,18 +44,24 @@ type TviewApp struct {
 	countriesData   map[string]int
 	referersData    map[string]int
 	logLines        []string
-	startTime       time.Time
-	paused          bool
-	refreshRate     time.Duration
-	statusFilter    int
-	timeWindow      time.Duration // Current time window (0 = all time)
-	timeWindowIndex int           // Index in timeWindowPresets
-	dataChanged     bool          // Flag to indicate new data arrived
 	geoLocator      *geoip.Locator
+	startTime       time.Time
+	refreshRate     time.Duration
+	timeWindow      time.Duration // Current time window (0 = all time)
+	statusFilter    int
+	timeWindowIndex int // Index in timeWindowPresets
+	paused          bool
+	dataChanged     bool // Flag to indicate new data arrived
 }
 
 // Time window presets (in minutes)
 var timeWindowPresets = []int{5, 30, 60, 180, 720, 1440, 10080, 43200, 0} // 5m, 30m, 1h, 3h, 12h, 1d, 7d, 30d, all time
+
+// UI display limits
+const (
+	maxTopItemsDisplay = 10 // Maximum items to display in top N tables
+	maxLogLinesDisplay = 15 // Maximum log lines to keep in stream
+)
 
 // NewTviewApp creates a new tview-based application.
 func NewTviewApp(lines <-chan string, logFilePath string, refreshRate time.Duration, geoLocator *geoip.Locator) *TviewApp {
@@ -77,8 +83,8 @@ func NewTviewApp(lines <-chan string, logFilePath string, refreshRate time.Durat
 		logLines:        make([]string, 0),
 		startTime:       time.Now(),
 		refreshRate:     refreshRate,
-		timeWindow:      0,                                    // Default: all time
-		timeWindowIndex: len(timeWindowPresets) - 1,          // Last preset (all time)
+		timeWindow:      0,                          // Default: all time
+		timeWindowIndex: len(timeWindowPresets) - 1, // Last preset (all time)
 		geoLocator:      geoLocator,
 	}
 
@@ -89,9 +95,9 @@ func NewTviewApp(lines <-chan string, logFilePath string, refreshRate time.Durat
 // initUI initializes the tview UI components.
 func (ta *TviewApp) initUI() {
 	// Define elegant color scheme
-	borderColor := tcell.NewRGBColor(75, 85, 99)    // Gray 600
-	titleColor := tcell.NewRGBColor(139, 92, 246)   // Purple
-	headerBg := tcell.NewRGBColor(31, 41, 55)       // Gray 800
+	borderColor := tcell.NewRGBColor(75, 85, 99)  // Gray 600
+	titleColor := tcell.NewRGBColor(139, 92, 246) // Purple
+	headerBg := tcell.NewRGBColor(31, 41, 55)     // Gray 800
 
 	// Create panels with borders and titles
 	ta.overview = ta.createTextView("📊 Overview", borderColor, titleColor)
@@ -121,14 +127,14 @@ func (ta *TviewApp) initUI() {
 
 	// Create main grid layout
 	ta.grid = tview.NewGrid().
-		SetRows(1, 0, 1).    // header, content, footer
-		SetColumns(0).       // full width
+		SetRows(1, 0, 1). // header, content, footer
+		SetColumns(0).    // full width
 		SetBorders(false)
 
 	// Create content grid - responsive 3-column layout
 	content := tview.NewGrid().
-		SetRows(4, 0, 0).        // overview (smaller), middle row, bottom row
-		SetColumns(0, 0, 0).     // 3 equal columns
+		SetRows(4, 0, 0).    // overview (smaller), middle row, bottom row
+		SetColumns(0, 0, 0). // 3 equal columns
 		SetBorders(true)
 
 	// Row 1: Overview spans all columns
@@ -141,8 +147,8 @@ func (ta *TviewApp) initUI() {
 
 	// Row 3: Bottom section with 2 rows
 	bottomGrid := tview.NewGrid().
-		SetRows(0, 0).           // 2 equal rows
-		SetColumns(0, 0, 0).     // 3 equal columns
+		SetRows(0, 0).       // 2 equal rows
+		SetColumns(0, 0, 0). // 3 equal columns
 		SetBorders(true)
 
 	// Bottom row 1: Visitors, Clients, Countries
@@ -424,9 +430,9 @@ func (ta *TviewApp) updateData() {
 		ta.logLines = append(ta.logLines, logLine)
 	}
 
-	// Keep only last 15 log lines
-	if len(ta.logLines) > 15 {
-		ta.logLines = ta.logLines[len(ta.logLines)-15:]
+	// Keep only last N log lines
+	if len(ta.logLines) > maxLogLinesDisplay {
+		ta.logLines = ta.logLines[len(ta.logLines)-maxLogLinesDisplay:]
 	}
 }
 
@@ -509,7 +515,7 @@ func (ta *TviewApp) renderStatus() {
 
 	row := 0
 	for _, item := range sorted {
-		if row >= 10 {
+		if row >= maxTopItemsDisplay {
 			break
 		}
 
@@ -557,25 +563,25 @@ func (ta *TviewApp) renderStatus() {
 // renderPaths renders the top paths table.
 func (ta *TviewApp) renderPaths() {
 	ta.pathsTable.Clear()
-	ta.renderTopN(ta.pathsTable, ta.pathsData, 10)
+	ta.renderTopN(ta.pathsTable, ta.pathsData)
 }
 
 // renderVisitors renders the top visitors table.
 func (ta *TviewApp) renderVisitors() {
 	ta.visitorsTable.Clear()
-	ta.renderTopN(ta.visitorsTable, ta.ips, 10)
+	ta.renderTopN(ta.visitorsTable, ta.ips)
 }
 
 // renderClients renders the top clients table.
 func (ta *TviewApp) renderClients() {
 	ta.clientsTable.Clear()
-	ta.renderTopN(ta.clientsTable, ta.userAgents, 10)
+	ta.renderTopN(ta.clientsTable, ta.userAgents)
 }
 
 // renderMethods renders the HTTP methods table.
 func (ta *TviewApp) renderMethods() {
 	ta.methodsTable.Clear()
-	ta.renderTopN(ta.methodsTable, ta.methodsData, 10)
+	ta.renderTopN(ta.methodsTable, ta.methodsData)
 }
 
 // renderCountries renders the top countries table.
@@ -620,11 +626,11 @@ func (ta *TviewApp) renderCountries() {
 // renderReferers renders the top referers table.
 func (ta *TviewApp) renderReferers() {
 	ta.referersTable.Clear()
-	ta.renderTopN(ta.referersTable, ta.referersData, 10)
+	ta.renderTopN(ta.referersTable, ta.referersData)
 }
 
 // renderTopN is a helper to render top N items from a map.
-func (ta *TviewApp) renderTopN(table *tview.Table, data map[string]int, limit int) {
+func (ta *TviewApp) renderTopN(table *tview.Table, data map[string]int) {
 	type kv struct {
 		key   string
 		value int
@@ -641,7 +647,7 @@ func (ta *TviewApp) renderTopN(table *tview.Table, data map[string]int, limit in
 
 	row := 0
 	for _, item := range sorted {
-		if row >= limit {
+		if row >= maxTopItemsDisplay {
 			break
 		}
 
@@ -691,28 +697,6 @@ var countryCodeToName = map[string]string{
 	"EG": "Egypt", "NG": "Nigeria", "KE": "Kenya", "UA": "Ukraine",
 }
 
-// countryCodeToFlag maps 2-letter country codes to flag emojis
-var countryCodeToFlag = map[string]string{
-	"US": "🇺🇸", "GB": "🇬🇧", "DE": "🇩🇪", "FR": "🇫🇷", "JP": "🇯🇵",
-	"CN": "🇨🇳", "IN": "🇮🇳", "BR": "🇧🇷", "RU": "🇷🇺", "CA": "🇨🇦",
-	"AU": "🇦🇺", "ES": "🇪🇸", "IT": "🇮🇹", "NL": "🇳🇱", "SE": "🇸🇪",
-	"NO": "🇳🇴", "DK": "🇩🇰", "FI": "🇫🇮", "PL": "🇵🇱", "BE": "🇧🇪",
-	"CH": "🇨🇭", "AT": "🇦🇹", "PT": "🇵🇹", "IE": "🇮🇪", "GR": "🇬🇷",
-	"CZ": "🇨🇿", "RO": "🇷🇴", "HU": "🇭🇺", "MX": "🇲🇽", "AR": "🇦🇷",
-	"CL": "🇨🇱", "CO": "🇨🇴", "ZA": "🇿🇦", "KR": "🇰🇷", "SG": "🇸🇬",
-	"HK": "🇭🇰", "TW": "🇹🇼", "TH": "🇹🇭", "MY": "🇲🇾", "ID": "🇮🇩",
-	"PH": "🇵🇭", "VN": "🇻🇳", "NZ": "🇳🇿", "TR": "🇹🇷", "IL": "🇮🇱",
-	"AE": "🇦🇪", "SA": "🇸🇦", "EG": "🇪🇬", "NG": "🇳🇬", "KE": "🇰🇪",
-	"UA": "🇺🇦",
-}
-
-// getCountryFlag returns the flag emoji for a country code.
-func getCountryFlag(countryCode string) string {
-	if flag, ok := countryCodeToFlag[countryCode]; ok {
-		return flag
-	}
-	return "🌍" // Default globe emoji for unknown countries
-}
 
 // getCountryName returns the full country name for a country code.
 func getCountryName(countryCode string) string {

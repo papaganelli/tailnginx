@@ -56,7 +56,7 @@ func (l *Locator) Lookup(ipStr string) (*Location, error) {
 		}
 		// Cache invalid IPs too to avoid repeated parsing
 		l.cache.Store(ipStr, loc)
-		return loc, nil
+		return loc, nil // Not an error, just invalid IP
 	}
 
 	// Use iploc to get country code

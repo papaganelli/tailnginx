@@ -56,7 +56,9 @@ func readLastNLines(path string, n int, out chan<- string) error {
 	if offset < 0 {
 		offset = 0
 	}
-	file.Seek(offset, io.SeekStart)
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		return err
+	}
 
 	// Read lines with buffer limits to prevent memory exhaustion
 	scanner := bufio.NewScanner(file)

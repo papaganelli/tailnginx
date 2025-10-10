@@ -9,16 +9,16 @@ import (
 
 // Visitor represents a parsed nginx access log entry.
 type Visitor struct {
-	IP       string
 	Time     time.Time
+	IP       string
 	Method   string
 	Path     string
 	Protocol string
-	Status   int
-	Bytes    int
 	Referer  string
 	Agent    string
 	Country  string // Added by geoip lookup, not from log
+	Status   int
+	Bytes    int
 }
 
 // combinedRegex matches the nginx combined log format
