@@ -43,7 +43,9 @@ func (l *Locator) Lookup(ipStr string) (*Location, error) {
 
 	// Check cache first
 	if cached, ok := l.cache.Load(ipStr); ok {
-		return cached.(*Location), nil
+		if loc, ok := cached.(*Location); ok {
+			return loc, nil
+		}
 	}
 
 	// Parse IP address
