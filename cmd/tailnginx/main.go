@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/papaganelli/tailnginx/internal/config"
+	"github.com/papaganelli/tailnginx/internal/version"
 	"github.com/papaganelli/tailnginx/pkg/detector"
 	"github.com/papaganelli/tailnginx/pkg/geoip"
 	"github.com/papaganelli/tailnginx/pkg/tailer"
@@ -20,10 +21,18 @@ func main() {
 	var cfg config.Config
 	var refreshMs int
 	var logPath string
+	var showVersion bool
 
 	flag.StringVar(&logPath, "log", "", "path to nginx access log (auto-detect if not specified)")
 	flag.IntVar(&refreshMs, "refresh", 1000, "refresh rate in milliseconds (100-10000)")
+	flag.BoolVar(&showVersion, "version", false, "show version information and exit")
 	flag.Parse()
+
+	// Handle version flag
+	if showVersion {
+		fmt.Println(version.Info())
+		os.Exit(0)
+	}
 
 	// Autodetect log file if not specified
 	if logPath == "" {

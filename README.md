@@ -57,6 +57,9 @@ make build
 ## Usage
 
 ```bash
+# Show version information
+./tailnginx -version
+
 # Auto-detect nginx logs (scans common paths and nginx config)
 ./tailnginx
 
@@ -90,6 +93,7 @@ Use -log flag to specify a different file
 
 - `-log` - Path to nginx access log (auto-detect if not specified)
 - `-refresh` - Refresh rate in milliseconds, 100-10000 (default: `1000`)
+- `-version` - Show version information and exit
 
 ### Controls
 
@@ -186,12 +190,14 @@ tailnginx has comprehensive test coverage:
 
 | Package | Coverage |
 |---------|----------|
+| pkg/metrics | 100.0% |
+| internal/version | 100.0% |
 | pkg/parser | 91.7% |
 | pkg/geoip | 88.9% |
 | pkg/tailer | 84.6% |
-| pkg/metrics | 100.0% |
 | pkg/detector | 60.5% |
-| **Overall** | **70.8%** |
+| ui | 21.6% |
+| **Overall** | **~73%** |
 
 ## Log Format
 
@@ -255,6 +261,13 @@ Contributions are welcome! Please:
 6. Submit a pull request
 
 ## Changelog
+
+### v1.4.0 (2025-10-10)
+- **Feature**: Added `-version` flag to show version, commit, and build information
+- **Tests**: Added UI test coverage (0% → 21.6%), testing filters, batch processing, and initialization
+- **Tests**: Added version package tests (100% coverage)
+- **Tests**: Overall project coverage improved (~70.8% → ~73%)
+- **Quality**: Added benchmarks for filter and batch processing performance
 
 ### v1.3.0 (2025-10-10)
 - **Feature**: Added real-time request rate tracking (requests/second)
