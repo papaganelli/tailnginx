@@ -8,9 +8,9 @@ import (
 
 // Version information. These are set via -ldflags during build.
 var (
-	Version   = "1.4.0"        // Application version
-	GitCommit = "dev"          // Git commit hash
-	BuildDate = "unknown"      // Build date
+	Version   = "1.4.0"           // Application version
+	GitCommit = "dev"             // Git commit hash
+	BuildDate = "unknown"         // Build date
 	GoVersion = runtime.Version() // Go version used to build
 )
 
